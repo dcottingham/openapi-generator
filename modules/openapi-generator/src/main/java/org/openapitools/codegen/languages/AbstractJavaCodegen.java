@@ -509,22 +509,18 @@ public abstract class AbstractJavaCodegen extends DefaultCodegen implements Code
 
         this.sanitizeConfig();
 
+        importMapping.put("Object", "Object");
+
         // optional jackson mappings for BigDecimal support
         importMapping.put("ToStringSerializer", "com.fasterxml.jackson.databind.ser.std.ToStringSerializer");
         importMapping.put("JsonSerialize", "com.fasterxml.jackson.databind.annotation.JsonSerialize");
 
         // imports for pojos
-        importMapping.put("ApiModelProperty", "io.swagger.annotations.ApiModelProperty");
-        importMapping.put("ApiModel", "io.swagger.annotations.ApiModel");
         importMapping.put("BigDecimal", "java.math.BigDecimal");
         importMapping.put("JsonProperty", "com.fasterxml.jackson.annotation.JsonProperty");
         importMapping.put("JsonSubTypes", "com.fasterxml.jackson.annotation.JsonSubTypes");
         importMapping.put("JsonTypeInfo", "com.fasterxml.jackson.annotation.JsonTypeInfo");
-        importMapping.put("JsonTypeName", "com.fasterxml.jackson.annotation.JsonTypeName");
-        importMapping.put("JsonCreator", "com.fasterxml.jackson.annotation.JsonCreator");
-        importMapping.put("JsonValue", "com.fasterxml.jackson.annotation.JsonValue");
-        importMapping.put("JsonIgnore", "com.fasterxml.jackson.annotation.JsonIgnore");
-        importMapping.put("JsonInclude", "com.fasterxml.jackson.annotation.JsonInclude");
+
         importMapping.put("SerializedName", "com.google.gson.annotations.SerializedName");
         importMapping.put("TypeAdapter", "com.google.gson.TypeAdapter");
         importMapping.put("JsonAdapter", "com.google.gson.annotations.JsonAdapter");
@@ -534,9 +530,6 @@ public abstract class AbstractJavaCodegen extends DefaultCodegen implements Code
         importMapping.put("Arrays", "java.util.Arrays");
         importMapping.put("Objects", "java.util.Objects");
         importMapping.put("StringUtil", invokerPackage + ".StringUtil");
-        // import JsonCreator if JsonProperty is imported
-        // used later in recursive import in postProcessingModels
-        importMapping.put("com.fasterxml.jackson.annotation.JsonProperty", "com.fasterxml.jackson.annotation.JsonCreator");
 
         if (additionalProperties.containsKey(JAVA8_MODE)) {
             setJava8ModeAndAdditionalProperties(Boolean.parseBoolean(additionalProperties.get(JAVA8_MODE).toString()));
@@ -778,13 +771,6 @@ public abstract class AbstractJavaCodegen extends DefaultCodegen implements Code
         // camelize the model name
         // phone_number => PhoneNumber
         final String camelizedName = camelize(nameWithPrefixSuffix);
-
-        // model name cannot use reserved keyword, e.g. return
-        if (isReservedWord(camelizedName)) {
-            final String modelName = "Model" + camelizedName;
-            LOGGER.warn("{} (reserved word) cannot be used as model name. Renamed to {}", camelizedName, modelName);
-            return modelName;
-        }
 
         // model name starts with number
         if (camelizedName.matches("^\\d.*")) {
@@ -1171,9 +1157,6 @@ public abstract class AbstractJavaCodegen extends DefaultCodegen implements Code
     public CodegenModel fromModel(String name, Schema model) {
         Map<String, Schema> allDefinitions = ModelUtils.getSchemas(this.openAPI);
         CodegenModel codegenModel = super.fromModel(name, model);
-        if (codegenModel.description != null) {
-            codegenModel.imports.add("ApiModel");
-        }
         if (codegenModel.discriminator != null && additionalProperties.containsKey("jackson")) {
             codegenModel.imports.add("JsonSubTypes");
             codegenModel.imports.add("JsonTypeInfo");
@@ -1210,12 +1193,6 @@ public abstract class AbstractJavaCodegen extends DefaultCodegen implements Code
             } else if ("map".equals(property.containerType)) {
                 model.imports.add("HashMap");
             }
-        }
-
-        if (!BooleanUtils.toBoolean(model.isEnum)) {
-            // needed by all pojos, but not enums
-            model.imports.add("ApiModelProperty");
-            model.imports.add("ApiModel");
         }
     }
 

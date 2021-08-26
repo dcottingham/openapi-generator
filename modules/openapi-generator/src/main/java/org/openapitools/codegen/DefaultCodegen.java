@@ -430,45 +430,6 @@ public class DefaultCodegen implements CodegenConfig {
                 objsValue.putAll(additionalProperties);
                 objs.put(cm.name, objsValue);
             }
-
-            // Gather data from all the models that contain oneOf into OneOfImplementorAdditionalData classes
-            // (see docstring of that class to find out what information is gathered and why)
-            Map<String, OneOfImplementorAdditionalData> additionalDataMap = new HashMap<String, OneOfImplementorAdditionalData>();
-            for (Map.Entry<String, Object> modelsEntry : objs.entrySet()) {
-                Map<String, Object> modelsAttrs = (Map<String, Object>) modelsEntry.getValue();
-                List<Object> models = (List<Object>) modelsAttrs.get("models");
-                List<Map<String, String>> modelsImports = (List<Map<String, String>>) modelsAttrs.getOrDefault("imports", new ArrayList<Map<String, String>>());
-                for (Object _mo : models) {
-                    Map<String, Object> mo = (Map<String, Object>) _mo;
-                    CodegenModel cm = (CodegenModel) mo.get("model");
-                    if (cm.oneOf.size() > 0) {
-                        cm.vendorExtensions.put("x-is-one-of-interface", true);
-                        for (String one : cm.oneOf) {
-                            if (!additionalDataMap.containsKey(one)) {
-                                additionalDataMap.put(one, new OneOfImplementorAdditionalData(one));
-                            }
-                            additionalDataMap.get(one).addFromInterfaceModel(cm, modelsImports);
-                        }
-                        // if this is oneOf interface, make sure we include the necessary imports for it
-                        addImportsToOneOfInterface(modelsImports);
-                    }
-                }
-            }
-
-            // Add all the data from OneOfImplementorAdditionalData classes to the implementing models
-            for (Map.Entry<String, Object> modelsEntry : objs.entrySet()) {
-                Map<String, Object> modelsAttrs = (Map<String, Object>) modelsEntry.getValue();
-                List<Object> models = (List<Object>) modelsAttrs.get("models");
-                List<Map<String, String>> imports = (List<Map<String, String>>) modelsAttrs.get("imports");
-                for (Object _implmo : models) {
-                    Map<String, Object> implmo = (Map<String, Object>) _implmo;
-                    CodegenModel implcm = (CodegenModel) implmo.get("model");
-                    String modelName = toModelName(implcm.name);
-                    if (additionalDataMap.containsKey(modelName)) {
-                        additionalDataMap.get(modelName).addToImplementor(this, implcm, imports, addOneOfInterfaceImports);
-                    }
-                }
-            }
         }
 
         return objs;
@@ -862,35 +823,6 @@ public class DefaultCodegen implements CodegenConfig {
                 }
             }
             schemas.putAll(propertySchemas);
-
-            // go through all gathered schemas and add them as interfaces to be created
-            for (Map.Entry<String, Schema> e : schemas.entrySet()) {
-                String n = toModelName(e.getKey());
-                Schema s = e.getValue();
-                String nOneOf = toModelName(n + "OneOf");
-                if (ModelUtils.isComposedSchema(s)) {
-                    if (e.getKey().contains("/")) {
-                        // if this is property schema, we also need to generate the oneOf interface model
-                        addOneOfNameExtension((ComposedSchema) s, nOneOf);
-                        addOneOfInterfaceModel((ComposedSchema) s, nOneOf, openAPI);
-                    } else {
-                        // else this is a component schema, so we will just use that as the oneOf interface model
-                        addOneOfNameExtension((ComposedSchema) s, n);
-                    }
-                } else if (ModelUtils.isArraySchema(s)) {
-                    Schema items = ((ArraySchema) s).getItems();
-                    if (ModelUtils.isComposedSchema(items)) {
-                        addOneOfNameExtension((ComposedSchema) items, nOneOf);
-                        addOneOfInterfaceModel((ComposedSchema) items, nOneOf, openAPI);
-                    }
-                } else if (ModelUtils.isMapSchema(s)) {
-                    Schema addProps = getAdditionalProperties(s);
-                    if (addProps != null && ModelUtils.isComposedSchema(addProps)) {
-                        addOneOfNameExtension((ComposedSchema) addProps, nOneOf);
-                        addOneOfInterfaceModel((ComposedSchema) addProps, nOneOf, openAPI);
-                    }
-                }
-            }
         }
     }
 
@@ -1275,7 +1207,7 @@ public class DefaultCodegen implements CodegenConfig {
     }
 
     public Boolean getUseOneOfInterfaces() {
-        return useOneOfInterfaces;
+        return new Boolean(false);
     }
 
     public void setUseOneOfInterfaces(Boolean useOneOfInterfaces) {
@@ -2071,11 +2003,7 @@ public class DefaultCodegen implements CodegenConfig {
      */
     @SuppressWarnings("static-method")
     public String toOneOfName(List<String> names, ComposedSchema composedSchema) {
-        Map<String, Object> exts = composedSchema.getExtensions();
-        if (exts != null && exts.containsKey("x-one-of-name")) {
-            return (String) exts.get("x-one-of-name");
-        }
-        return "oneOf<" + String.join(",", names) + ">";
+        return "Object";
     }
 
     @Override
@@ -2960,7 +2888,6 @@ public class DefaultCodegen implements CodegenConfig {
      */
     protected List<MappedModel> getOneOfAnyOfDescendants(String composedSchemaName, String discPropName, ComposedSchema c, OpenAPI openAPI) {
         ArrayList<List<Schema>> listOLists = new ArrayList<>();
-        listOLists.add(c.getOneOf());
         listOLists.add(c.getAnyOf());
         List<MappedModel> descendentSchemas = new ArrayList<>();
         for (List<Schema> schemaList : listOLists) {
@@ -3117,15 +3044,7 @@ public class DefaultCodegen implements CodegenConfig {
                 }
             }
         }
-        // if there are composed oneOf/anyOf schemas, add them to this discriminator
-        if (ModelUtils.isComposedSchema(schema) && !this.getLegacyDiscriminatorBehavior()) {
-            List<MappedModel> otherDescendants = getOneOfAnyOfDescendants(schemaName, discPropName, (ComposedSchema) schema, openAPI);
-            for (MappedModel otherDescendant : otherDescendants) {
-                if (!uniqueDescendants.contains(otherDescendant)) {
-                    uniqueDescendants.add(otherDescendant);
-                }
-            }
-        }
+
         if (!this.getLegacyDiscriminatorBehavior()) {
             Collections.sort(uniqueDescendants);
         }
